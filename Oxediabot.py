@@ -5,6 +5,7 @@ import os
 import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -1558,7 +1559,7 @@ def setup_handlers(application):
     # Add handler for invalid messages during conversation
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
 
-def main():
+async def main():
     # Load data at startup
     load_data()
     
@@ -1587,7 +1588,7 @@ def main():
             await application.bot.set_webhook(url=f"{webhook_url}/{BOT_TOKEN}")
             
             # Start webhook server
-            application.run_webhook(
+            await application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{webhook_url}/{BOT_TOKEN}",
@@ -1597,7 +1598,7 @@ def main():
         else:
             # Polling mode for local development
             print("🔄 Starting in polling mode...")
-            application.run_polling(
+            await application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True
             )
@@ -1608,4 +1609,5 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    # Run the async main function
+    asyncio.run(main())
