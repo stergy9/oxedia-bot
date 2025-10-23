@@ -5,7 +5,6 @@ import os
 import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
-import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -27,8 +26,6 @@ user_recent_orders = {}
 BOT_TOKEN = os.getenv('BOT_TOKEN', "8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc")
 CHANNEL_ID = os.getenv('CHANNEL_ID', "-1002590779764")
 ADMIN_ID = int(os.getenv('ADMIN_ID', "7111040655"))
-RENDER = os.getenv('RENDER', 'false').lower() == 'true'
-PORT = int(os.getenv('PORT', 8443))
 
 # Price limitations for each currency
 PRICE_LIMITS = {
@@ -759,7 +756,7 @@ async def handle_search_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif search_type == "📋 البحث برقم الإعلان":
         context.user_data['search_type'] = 'order_id'
-        await update.message.reply_text("📋 **البحث برقم الإعلان**\n\nالرجاء إدخال رقم الإعلان المطلوب:")
+        await update.message.reply_text("📋 **البحث بررقم الإعلان**\n\nالرجاء إدخال رقم الإعلان المطلوب:")
         return WAITING_FOR_SEARCH_INPUT
 
     else:
@@ -1494,6 +1491,15 @@ async def cancel_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
+# Handle invalid messages during conversation
+async def handle_invalid_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message is None:
+        return
+
+    await update.message.reply_text(
+        "❌ الرجاء استخدام الأزرار المقدمة أو اتباع التعليمات.\n\nإضغط على /cancel للإلغاء\n\nإضغط على /menu للعودة للقائمة الرئيسية"
+    )
+
 def setup_handlers(application):
     """Setup all Telegram bot handlers"""
     # Conversation handler for creating ads and search
@@ -1574,31 +1580,13 @@ def main():
         print(f"📢 Target Channel: {CHANNEL_ID}")
         print(f"👤 Admin ID: {ADMIN_ID}")
         print(f"📞 Contact: @SYR_P2P")
-        print(f"🌐 Webhook Mode: {RENDER}")
-        print(f"🔧 Port: {PORT}")
         
-        if RENDER:
-            # Webhook mode for Render
-            # Use Render's provided URL for webhook
-            webhook_url = f"https://{os.getenv('RENDER_SERVICE_NAME', 'your-app-name')}.onrender.com"
-            
-            print(f"🌐 Setting webhook to: {webhook_url}")
-            
-            # Run webhook
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                webhook_url=f"{webhook_url}/{BOT_TOKEN}",
-                secret_token='WEBHOOK_SECRET'
-            )
-            
-        else:
-            # Polling mode for local development
-            print("🔄 Starting in polling mode...")
-            application.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True
-            )
+        # Start polling
+        print("🔄 Starting in polling mode...")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
         
     except Exception as e:
         print(f"❌ Bot crashed with error: {e}")
