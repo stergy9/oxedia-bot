@@ -4,6 +4,10 @@ import json
 import os
 import urllib.parse
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Conversation states
 SELECTING_ORDER_TYPE, ENTERING_AMOUNT, SELECTING_CURRENCY, SELECTING_PAYMENT_METHOD, ENTERING_PRICE, WAITING_FOR_SEARCH_TYPE, WAITING_FOR_SEARCH_INPUT, SEARCH_CURRENCY, SEARCH_PAYMENT = range(9)
@@ -18,10 +22,10 @@ ADMIN_DATA_FILE = "admin_data.json"
 active_orders = {}
 user_recent_orders = {}
 
-# Your credentials
-BOT_TOKEN = "8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc"
-CHANNEL_ID = "-1002590779764"
-ADMIN_ID = 7111040655
+# Your credentials from environment variables
+BOT_TOKEN = os.getenv('BOT_TOKEN', "8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc")
+CHANNEL_ID = os.getenv('CHANNEL_ID', "-1002590779764")
+ADMIN_ID = int(os.getenv('ADMIN_ID', "7111040655"))
 
 # Price limitations for each currency
 PRICE_LIMITS = {
@@ -48,7 +52,7 @@ CURRENCY_DISPLAY = {
 DEFAULT_ADMIN_DATA = {
     "role_password": "Master911911$$$",
     "admins": [
-        {"id": 7111040655, "username": "Oxedia_Admin", "name": "Oxedia Admin", "added_time": datetime.now().isoformat()}
+        {"id": ADMIN_ID, "username": "Oxedia_Admin", "name": "Oxedia Admin", "added_time": datetime.now().isoformat()}
     ],
     "work_sessions": {},
     "current_active_admin": None
@@ -59,41 +63,55 @@ def load_data():
     global order_counter, active_orders, user_recent_orders
     try:
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, 'r') as f:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 order_counter = data.get('order_counter', 0)
                 active_orders = data.get('active_orders', {})
                 user_recent_orders = data.get('user_recent_orders', {})
-    except:
+        else:
+            # Initialize with default values if file doesn't exist
+            order_counter = 0
+            active_orders = {}
+            user_recent_orders = {}
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        # Initialize with default values on error
         order_counter = 0
         active_orders = {}
         user_recent_orders = {}
 
 # Save data from file
 def save_data():
-    data = {
-        'order_counter': order_counter,
-        'active_orders': active_orders,
-        'user_recent_orders': user_recent_orders
-    }
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f)
+    try:
+        data = {
+            'order_counter': order_counter,
+            'active_orders': active_orders,
+            'user_recent_orders': user_recent_orders
+        }
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving data: {e}")
 
 # Load admin data from file
 def load_admin_data():
     try:
         if os.path.exists(ADMIN_DATA_FILE):
-            with open(ADMIN_DATA_FILE, 'r') as f:
+            with open(ADMIN_DATA_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         else:
             return DEFAULT_ADMIN_DATA.copy()
-    except:
+    except Exception as e:
+        print(f"Error loading admin data: {e}")
         return DEFAULT_ADMIN_DATA.copy()
 
 # Save admin data to file
 def save_admin_data(admin_data):
-    with open(ADMIN_DATA_FILE, 'w') as f:
-        json.dump(admin_data, f, indent=4)
+    try:
+        with open(ADMIN_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(admin_data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"Error saving admin data: {e}")
 
 # Check if user is admin
 def is_admin(user_id, username):
@@ -115,6 +133,9 @@ def get_current_active_admin():
     current_admin_id = admin_data.get('current_active_admin')
     if not current_admin_id:
         return None
+
+    # Ensure type consistency
+    current_admin_id = int(current_admin_id) if isinstance(current_admin_id, str) else current_admin_id
 
     for admin in admin_data['admins']:
         if admin['id'] == current_admin_id:
@@ -670,27 +691,29 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     data = query.data
     user_id = query.from_user.id
+    username = query.from_user.username
 
-    if user_id != ADMIN_ID:
+    # Check if user is admin (not just master admin)
+    if not is_admin(user_id, username):
         await query.edit_message_text("❌ غير مصرح لك بهذا الإجراء")
         return
 
     if data.startswith("strike_"):
         order_id = int(data.replace("strike_", ""))
-        await handle_strike_from_callback(update, context, order_id, query.message.message_id)
+        await handle_strike_from_callback(update, context, order_id, query.message.message_id, user_id)
 
 # Handle strike from callback
-async def handle_strike_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, order_id: int, message_id: int):
+async def handle_strike_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, order_id: int, message_id: int, admin_id: int):
     try:
         if order_id not in active_orders:
-            await context.bot.edit_message_text(chat_id=ADMIN_ID, message_id=message_id, text="❌ الإعلان غير موجود قد يكون تم إكماله")
+            await context.bot.edit_message_text(chat_id=admin_id, message_id=message_id, text="❌ الإعلان غير موجود قد يكون تم إكماله")
             return
 
         order_data = active_orders[order_id]
         strikethrough_text = create_strikethrough_ad_text(order_data, order_id)
 
         await context.bot.edit_message_text(chat_id=CHANNEL_ID, message_id=order_data['channel_message_id'], text=strikethrough_text, parse_mode='HTML')
-        await context.bot.edit_message_text(chat_id=ADMIN_ID, message_id=message_id, text=f"✅ تم إكمال الطلب #{order_id} بنجاح!\n\n النوع: {order_data['order_type_display']}\n👤 التاجر: @{order_data['trader_username'] if order_data['trader_username'] else order_data['trader_name']}")
+        await context.bot.edit_message_text(chat_id=admin_id, message_id=message_id, text=f"✅ تم إكمال الطلب #{order_id} بنجاح!\n\n النوع: {order_data['order_type_display']}\n👤 التاجر: @{order_data['trader_username'] if order_data['trader_username'] else order_data['trader_name']}")
 
         del active_orders[order_id]
         user_id = order_data['trader_id']
@@ -702,11 +725,14 @@ async def handle_strike_from_callback(update: Update, context: ContextTypes.DEFA
 
     except Exception as e:
         error_message = f"❌ فشل في إكمال الطلب: {e}"
-        await context.bot.edit_message_text(chat_id=ADMIN_ID, message_id=message_id, text=error_message)
+        await context.bot.edit_message_text(chat_id=admin_id, message_id=message_id, text=error_message)
 
 # Enhanced Info command - admin only
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    
+    if not is_admin(user_id, username):
         await update.message.reply_text("❌ هذا الأمر للمسؤول فقط")
         return
 
@@ -739,7 +765,10 @@ async def handle_search_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Handle search input
 async def handle_search_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    
+    if not is_admin(user_id, username):
         await update.message.reply_text("❌ هذا الأمر للمسؤول فقط")
         return ConversationHandler.END
 
@@ -912,8 +941,11 @@ async def handle_invalid_message(update: Update, context: ContextTypes.DEFAULT_T
 
 # Reset counter command (admin only)
 async def reset_counter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ هذا الأمر للمسؤول فقط")
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    
+    if not is_master_admin(user_id, username):
+        await update.message.reply_text("❌ هذا الأمر للمسؤول الرئيسي فقط")
         return
 
     global order_counter
@@ -928,7 +960,10 @@ async def show_counter_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Admin stats command
 async def admin_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    
+    if not is_admin(user_id, username):
         await update.message.reply_text("❌ هذا الأمر للمسؤول فقط")
         return
 
@@ -1457,78 +1492,90 @@ async def cancel_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    # Load data at startup
+    load_data()
+    
+    try:
+        app = Application.builder().token(BOT_TOKEN).build()
 
-    # Conversation handler for creating ads and search
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler('menu', menu_command)
-        ],
-        states={
-            SELECTING_ORDER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_type)],
-            ENTERING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
-            SELECTING_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_currency)],
-            SELECTING_PAYMENT_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_method)],
-            ENTERING_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_price)],
-            SEARCH_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_payment)],
-            SEARCH_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_results)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
+        # Conversation handler for creating ads and search
+        conv_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler('menu', menu_command)
+            ],
+            states={
+                SELECTING_ORDER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_type)],
+                ENTERING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
+                SELECTING_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_currency)],
+                SELECTING_PAYMENT_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_method)],
+                ENTERING_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_price)],
+                SEARCH_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_payment)],
+                SEARCH_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_results)],
+            },
+            fallbacks=[CommandHandler('cancel', cancel_command)]
+        )
 
-    # Conversation handler for info command (admin only)
-    info_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('info', info_command)],
-        states={
-            WAITING_FOR_SEARCH_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_type)],
-            WAITING_FOR_SEARCH_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_input)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
+        # Conversation handler for info command (admin only)
+        info_conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('info', info_command)],
+            states={
+                WAITING_FOR_SEARCH_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_type)],
+                WAITING_FOR_SEARCH_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_input)],
+            },
+            fallbacks=[CommandHandler('cancel', cancel_command)]
+        )
 
-    # Conversation handler for role command (admin management)
-    role_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('role', role_command)],
-        states={
-            ROLE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_role_password)],
-            ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_menu)],
-            CHANGE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_change_password)],
-            ADD_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_add_admin)],
-            REMOVE_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_remove_admin)],
-            RESET_ADMIN_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_admin_time)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_admin_command)]
-    )
+        # Conversation handler for role command (admin management)
+        role_conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('role', role_command)],
+            states={
+                ROLE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_role_password)],
+                ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_menu)],
+                CHANGE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_change_password)],
+                ADD_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_add_admin)],
+                REMOVE_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_remove_admin)],
+                RESET_ADMIN_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_admin_time)],
+            },
+            fallbacks=[CommandHandler('cancel', cancel_admin_command)]
+        )
 
-    # Add handlers
-    app.add_handler(CommandHandler('start', start_command))
-    app.add_handler(CommandHandler('done', done_command))
-    app.add_handler(CommandHandler('reset_counter', reset_counter_command))
-    app.add_handler(CommandHandler('counter', show_counter_command))
-    app.add_handler(CommandHandler('admin_stats', admin_stats_command))
-    app.add_handler(CommandHandler('help', help_command))
-    app.add_handler(CommandHandler('p2p', p2p_command))
-    app.add_handler(CommandHandler('stop_p2p', stop_p2p_command))
-    app.add_handler(conv_handler)
-    app.add_handler(info_conv_handler)
-    app.add_handler(role_conv_handler)
+        # Add handlers
+        app.add_handler(CommandHandler('start', start_command))
+        app.add_handler(CommandHandler('done', done_command))
+        app.add_handler(CommandHandler('reset_counter', reset_counter_command))
+        app.add_handler(CommandHandler('counter', show_counter_command))
+        app.add_handler(CommandHandler('admin_stats', admin_stats_command))
+        app.add_handler(CommandHandler('help', help_command))
+        app.add_handler(CommandHandler('p2p', p2p_command))
+        app.add_handler(CommandHandler('stop_p2p', stop_p2p_command))
+        app.add_handler(conv_handler)
+        app.add_handler(info_conv_handler)
+        app.add_handler(role_conv_handler)
 
-    # Add handler for specific ad completion commands
-    app.add_handler(MessageHandler(filters.Regex(r'^/done_\d+$'), handle_specific_done))
+        # Add handler for specific ad completion commands
+        app.add_handler(MessageHandler(filters.Regex(r'^/done_\d+$'), handle_specific_done))
 
-    # Add handler for admin callback actions
-    app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern=r"^strike_"))
+        # Add handler for admin callback actions
+        app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern=r"^strike_"))
 
-    # Add handler for invalid messages during conversation
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
+        # Add handler for invalid messages during conversation
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
 
-    print("🤖 P2P Crypto Fiat Bot is running...")
-    print(f"📢 Target Channel: {CHANNEL_ID}")
-    print(f"👤 Admin ID: {ADMIN_ID}")
-    print(f"📞 Contact: @SYR_P2P")
-    app.run_polling()
+        print("🤖 P2P Crypto Fiat Bot is running...")
+        print(f"📢 Target Channel: {CHANNEL_ID}")
+        print(f"👤 Admin ID: {ADMIN_ID}")
+        print(f"📞 Contact: @SYR_P2P")
+        
+        # Start the bot
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+        
+    except Exception as e:
+        print(f"❌ Bot crashed with error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    # Initialize data
-    load_data()
     main()
