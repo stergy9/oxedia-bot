@@ -1559,7 +1559,7 @@ def setup_handlers(application):
     # Add handler for invalid messages during conversation
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
 
-async def main():
+def main():
     # Load data at startup
     load_data()
     
@@ -1584,11 +1584,8 @@ async def main():
             
             print(f"🌐 Setting webhook to: {webhook_url}")
             
-            # Set webhook
-            await application.bot.set_webhook(url=f"{webhook_url}/{BOT_TOKEN}")
-            
-            # Start webhook server
-            await application.run_webhook(
+            # Run webhook
+            application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{webhook_url}/{BOT_TOKEN}",
@@ -1598,7 +1595,7 @@ async def main():
         else:
             # Polling mode for local development
             print("🔄 Starting in polling mode...")
-            await application.run_polling(
+            application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True
             )
@@ -1609,5 +1606,4 @@ async def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    # Run the async main function
-    asyncio.run(main())
+    main()
