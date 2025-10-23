@@ -5,6 +5,7 @@ import os
 import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
+from flask import Flask, request
 
 # Load environment variables
 load_dotenv()
@@ -26,6 +27,8 @@ user_recent_orders = {}
 BOT_TOKEN = os.getenv('BOT_TOKEN', "8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc")
 CHANNEL_ID = os.getenv('CHANNEL_ID', "-1002590779764")
 ADMIN_ID = int(os.getenv('ADMIN_ID', "7111040655"))
+RENDER = os.getenv('RENDER', 'false').lower() == 'true'
+PORT = int(os.getenv('PORT', 8443))
 
 # Price limitations for each currency
 PRICE_LIMITS = {
@@ -1491,86 +1494,125 @@ async def cancel_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
+# Initialize Flask app for webhook
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🤖 Oxedia P2P Bot is running!"
+
+@app.route('/health')
+def health():
+    return "✅ Bot is healthy"
+
+def setup_handlers(application):
+    """Setup all Telegram bot handlers"""
+    # Conversation handler for creating ads and search
+    conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler('menu', menu_command)
+        ],
+        states={
+            SELECTING_ORDER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_type)],
+            ENTERING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
+            SELECTING_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_currency)],
+            SELECTING_PAYMENT_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_method)],
+            ENTERING_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_price)],
+            SEARCH_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_payment)],
+            SEARCH_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_results)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+
+    # Conversation handler for info command (admin only)
+    info_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('info', info_command)],
+        states={
+            WAITING_FOR_SEARCH_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_type)],
+            WAITING_FOR_SEARCH_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_input)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+
+    # Conversation handler for role command (admin management)
+    role_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('role', role_command)],
+        states={
+            ROLE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_role_password)],
+            ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_menu)],
+            CHANGE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_change_password)],
+            ADD_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_add_admin)],
+            REMOVE_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_remove_admin)],
+            RESET_ADMIN_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_admin_time)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_admin_command)]
+    )
+
+    # Add handlers
+    application.add_handler(CommandHandler('start', start_command))
+    application.add_handler(CommandHandler('done', done_command))
+    application.add_handler(CommandHandler('reset_counter', reset_counter_command))
+    application.add_handler(CommandHandler('counter', show_counter_command))
+    application.add_handler(CommandHandler('admin_stats', admin_stats_command))
+    application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('p2p', p2p_command))
+    application.add_handler(CommandHandler('stop_p2p', stop_p2p_command))
+    application.add_handler(conv_handler)
+    application.add_handler(info_conv_handler)
+    application.add_handler(role_conv_handler)
+
+    # Add handler for specific ad completion commands
+    application.add_handler(MessageHandler(filters.Regex(r'^/done_\d+$'), handle_specific_done))
+
+    # Add handler for admin callback actions
+    application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern=r"^strike_"))
+
+    # Add handler for invalid messages during conversation
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
+
 def main():
     # Load data at startup
     load_data()
     
     try:
-        app = Application.builder().token(BOT_TOKEN).build()
-
-        # Conversation handler for creating ads and search
-        conv_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('menu', menu_command)
-            ],
-            states={
-                SELECTING_ORDER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_type)],
-                ENTERING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
-                SELECTING_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_currency)],
-                SELECTING_PAYMENT_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_method)],
-                ENTERING_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_price)],
-                SEARCH_CURRENCY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_payment)],
-                SEARCH_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_results)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel_command)]
-        )
-
-        # Conversation handler for info command (admin only)
-        info_conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('info', info_command)],
-            states={
-                WAITING_FOR_SEARCH_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_type)],
-                WAITING_FOR_SEARCH_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_input)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel_command)]
-        )
-
-        # Conversation handler for role command (admin management)
-        role_conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('role', role_command)],
-            states={
-                ROLE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_role_password)],
-                ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_menu)],
-                CHANGE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_change_password)],
-                ADD_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_add_admin)],
-                REMOVE_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_remove_admin)],
-                RESET_ADMIN_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_admin_time)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel_admin_command)]
-        )
-
-        # Add handlers
-        app.add_handler(CommandHandler('start', start_command))
-        app.add_handler(CommandHandler('done', done_command))
-        app.add_handler(CommandHandler('reset_counter', reset_counter_command))
-        app.add_handler(CommandHandler('counter', show_counter_command))
-        app.add_handler(CommandHandler('admin_stats', admin_stats_command))
-        app.add_handler(CommandHandler('help', help_command))
-        app.add_handler(CommandHandler('p2p', p2p_command))
-        app.add_handler(CommandHandler('stop_p2p', stop_p2p_command))
-        app.add_handler(conv_handler)
-        app.add_handler(info_conv_handler)
-        app.add_handler(role_conv_handler)
-
-        # Add handler for specific ad completion commands
-        app.add_handler(MessageHandler(filters.Regex(r'^/done_\d+$'), handle_specific_done))
-
-        # Add handler for admin callback actions
-        app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern=r"^strike_"))
-
-        # Add handler for invalid messages during conversation
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_message))
+        # Create application
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # Setup all handlers
+        setup_handlers(application)
 
         print("🤖 P2P Crypto Fiat Bot is running...")
         print(f"📢 Target Channel: {CHANNEL_ID}")
         print(f"👤 Admin ID: {ADMIN_ID}")
         print(f"📞 Contact: @SYR_P2P")
+        print(f"🌐 Webhook Mode: {RENDER}")
+        print(f"🔧 Port: {PORT}")
         
-        # Start the bot
-        app.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
+        if RENDER:
+            # Webhook mode for Render
+            webhook_url = f"https://your-app-name.onrender.com/{BOT_TOKEN}"
+            
+            # Set webhook
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=PORT,
+                url_path=BOT_TOKEN,
+                webhook_url=webhook_url,
+                secret_token='WEBHOOK_SECRET'  # Optional: add for security
+            )
+            
+            # Start Flask app in a separate thread
+            from threading import Thread
+            flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False))
+            flask_thread.daemon = True
+            flask_thread.start()
+            
+        else:
+            # Polling mode for local development
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True
+            )
         
     except Exception as e:
         print(f"❌ Bot crashed with error: {e}")
@@ -1579,5 +1621,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
