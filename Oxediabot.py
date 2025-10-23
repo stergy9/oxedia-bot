@@ -36,9 +36,9 @@ PRICE_LIMITS = {
 
 # Payment methods for each currency
 PAYMENT_METHODS = {
-    "SYP": ["شام كاش", "سيرياتيل كاش", "كاش MTN", "البنك الإسلامي", "بنك البركة", "بنك بيمو"],
+    "SYP": ["شام كاش", "سيرياتيل كاش", "كاش MTN", "البنك الإسلامي", "بنك البركة", "بنك بيمو", "هرم", "فؤاد"],
     "EGP": ["فودافون كاش", "أورانج كاش", "إتصالات كاش", "إنستا باي", "بنك مصر", "البنك الأهلي", "CIB بنك", "بنك الإسكندرية"],
-    "USD": ["شام كاش $", "Airtm", "Payeer", "Paypal", "Revolut", "Neteller", "Skrill", "Webmoney", "Wise", "Whish"]
+    "USD": ["شام كاش $", "هرم $", "فؤاد $", "Airtm", "Payeer", "Paypal", "Revolut", "Neteller", "Skrill", "Webmoney", "Wise", "Whish"]
 }
 
 # Currency display names
@@ -1579,3 +1579,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
