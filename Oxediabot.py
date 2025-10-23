@@ -5,7 +5,6 @@ import os
 import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, request
 
 # Load environment variables
 load_dotenv()
@@ -1494,17 +1493,6 @@ async def cancel_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# Initialize Flask app for webhook
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "🤖 Oxedia P2P Bot is running!"
-
-@app.route('/health')
-def health():
-    return "✅ Bot is healthy"
-
 def setup_handlers(application):
     """Setup all Telegram bot handlers"""
     # Conversation handler for creating ads and search
@@ -1590,25 +1578,25 @@ def main():
         
         if RENDER:
             # Webhook mode for Render
-            webhook_url = f"https://your-app-name.onrender.com/{BOT_TOKEN}"
+            # Use Render's provided URL for webhook
+            webhook_url = f"https://{os.getenv('RENDER_SERVICE_NAME', 'your-app-name')}.onrender.com"
+            
+            print(f"🌐 Setting webhook to: {webhook_url}")
             
             # Set webhook
+            await application.bot.set_webhook(url=f"{webhook_url}/{BOT_TOKEN}")
+            
+            # Start webhook server
             application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
-                url_path=BOT_TOKEN,
-                webhook_url=webhook_url,
-                secret_token='WEBHOOK_SECRET'  # Optional: add for security
+                webhook_url=f"{webhook_url}/{BOT_TOKEN}",
+                secret_token='WEBHOOK_SECRET'
             )
-            
-            # Start Flask app in a separate thread
-            from threading import Thread
-            flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False))
-            flask_thread.daemon = True
-            flask_thread.start()
             
         else:
             # Polling mode for local development
+            print("🔄 Starting in polling mode...")
             application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True
