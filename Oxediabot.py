@@ -4,8 +4,6 @@ import json
 import os
 import urllib.parse
 from datetime import datetime
-from dotenv import load_dotenv
-load_dotenv()  # Load .env file if exists
 
 # Conversation states
 SELECTING_ORDER_TYPE, ENTERING_AMOUNT, SELECTING_CURRENCY, SELECTING_PAYMENT_METHOD, ENTERING_PRICE, WAITING_FOR_SEARCH_TYPE, WAITING_FOR_SEARCH_INPUT, SEARCH_CURRENCY, SEARCH_PAYMENT = range(9)
@@ -21,9 +19,9 @@ active_orders = {}
 user_recent_orders = {}
 
 # Your credentials
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc')
-CHANNEL_ID = os.getenv('CHANNEL_ID', '-1002590779764')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '7111040655'))
+BOT_TOKEN = "8270322197:AAHBGcSY2b7MryjA7XJVEldspLrrHUTHinc"
+CHANNEL_ID = "-1002590779764"
+ADMIN_ID = 7111040655
 
 # Price limitations for each currency
 PRICE_LIMITS = {
@@ -1533,5 +1531,4 @@ def main():
 if __name__ == "__main__":
     # Initialize data
     load_data()
-
     main()
